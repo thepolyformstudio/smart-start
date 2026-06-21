@@ -31,8 +31,10 @@ export default function PlannerPage() {
   const [planExists, setPlanExists] = useState(false)
   const [customMins, setCustomMins] = useState('')
   const [taskModalOpen, setTaskModalOpen] = useState(false)
-  const [taskForm, setTaskForm] = useState({ text: '', subject_id: '', date: format(new Date(), 'yyyy-MM-dd'), duration: '30' })
+  const [taskForm, setTaskForm] = useState({ text: '', subject_id: '', chapter_id: '', topic_id: '', date: format(new Date(), 'yyyy-MM-dd'), duration: '30' })
   const [subjectsList, setSubjectsList] = useState<{ id: string, name: string }[]>([])
+  const [chaptersList, setChaptersList] = useState<{ id: string, name: string }[]>([])
+  const [topicsList, setTopicsList] = useState<{ id: string, name: string }[]>([])
   const [savingTask, setSavingTask] = useState(false)
   const { success, error } = useToast()
 
@@ -67,6 +69,37 @@ export default function PlannerPage() {
 
   useEffect(() => { fetchPlan() }, [fetchPlan])
 
+  const handleSubjectChange = async (subjectId: string) => {
+    setTaskForm(prev => ({ ...prev, subject_id: subjectId, chapter_id: '', topic_id: '', text: '' }))
+    setChaptersList([])
+    setTopicsList([])
+    if (!subjectId) return
+    const supabase = createClient()
+    const { data } = await supabase.from('chapters').select('id, name').eq('subject_id', subjectId).order('order_index')
+    setChaptersList(data || [])
+  }
+
+  const handleChapterChange = async (chapterId: string) => {
+    setTaskForm(prev => ({ ...prev, chapter_id: chapterId, topic_id: '', text: '' }))
+    setTopicsList([])
+    if (!chapterId) return
+    const supabase = createClient()
+    const { data } = await supabase.from('topics').select('id, name').eq('chapter_id', chapterId).order('name')
+    setTopicsList(data || [])
+    // Auto-fill description with chapter name
+    const chapter = chaptersList.find(c => c.id === chapterId)
+    if (chapter) setTaskForm(prev => ({ ...prev, chapter_id: chapterId, text: `Study: ${chapter.name}` }))
+  }
+
+  const handleTopicChange = (topicId: string) => {
+    const topic = topicsList.find(t => t.id === topicId)
+    setTaskForm(prev => ({
+      ...prev,
+      topic_id: topicId,
+      text: topic ? `Study: ${topic.name}` : prev.text,
+    }))
+  }
+
   const handleAddTask = async () => {
     if (!taskForm.text.trim()) { error('Task description is required'); return }
     setSavingTask(true)
@@ -84,9 +117,11 @@ export default function PlannerPage() {
 
     setSavingTask(false)
     setTaskModalOpen(false)
-    setTaskForm({ text: '', subject_id: '', date: today, duration: '30' })
+    setTaskForm({ text: '', subject_id: '', chapter_id: '', topic_id: '', date: today, duration: '30' })
+    setChaptersList([])
+    setTopicsList([])
     success('Task scheduled successfully!')
-    
+
     // Automatically regenerate if they schedule it for today
     if (taskForm.date === today) {
       generatePlan()
@@ -472,34 +507,63 @@ export default function PlannerPage() {
         </div>
       )}
 
-      <Modal isOpen={taskModalOpen} onClose={() => setTaskModalOpen(false)} title="Schedule a Task">
+      <Modal isOpen={taskModalOpen} onClose={() => { setTaskModalOpen(false); setChaptersList([]); setTopicsList([]) }} title="Schedule a Task">
         <div className="space-y-4">
-          <Input 
-            label="Task Description" 
-            placeholder="E.g., Complete Math Assignment 3" 
-            value={taskForm.text} 
-            onChange={(e) => setTaskForm({ ...taskForm, text: e.target.value })} 
-          />
+
+          {/* Subject */}
           <div>
-            <label className="block text-sm font-medium text-text-primary-light dark:text-text-primary-dark mb-1.5">Subject (Optional)</label>
-            <select value={taskForm.subject_id} onChange={(e) => setTaskForm({ ...taskForm, subject_id: e.target.value })}
+            <label className="block text-sm font-medium text-text-primary-light dark:text-text-primary-dark mb-1.5">Subject</label>
+            <select value={taskForm.subject_id} onChange={(e) => handleSubjectChange(e.target.value)}
               className="w-full px-4 py-3 rounded-xl border border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark text-text-primary-light dark:text-text-primary-dark text-sm">
-              <option value="">No specific subject</option>
+              <option value="">— Select a subject (optional) —</option>
               {subjectsList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
+
+          {/* Chapter — shown only when subject selected */}
+          {chaptersList.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-text-primary-light dark:text-text-primary-dark mb-1.5">Chapter</label>
+              <select value={taskForm.chapter_id} onChange={(e) => handleChapterChange(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark text-text-primary-light dark:text-text-primary-dark text-sm">
+                <option value="">— Select a chapter (optional) —</option>
+                {chaptersList.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Topic — shown only when chapter selected */}
+          {topicsList.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-text-primary-light dark:text-text-primary-dark mb-1.5">Topic</label>
+              <select value={taskForm.topic_id} onChange={(e) => handleTopicChange(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl border border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark text-text-primary-light dark:text-text-primary-dark text-sm">
+                <option value="">— Select a topic (optional) —</option>
+                {topicsList.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          {/* Task Description — auto-filled but editable */}
+          <Input
+            label="Task Description"
+            placeholder="E.g., Study Chapter 3 - Laws of Motion"
+            value={taskForm.text}
+            onChange={(e) => setTaskForm({ ...taskForm, text: e.target.value })}
+          />
+
           <div className="grid grid-cols-2 gap-4">
-            <Input 
+            <Input
               type="date"
-              label="Date" 
-              value={taskForm.date} 
-              onChange={(e) => setTaskForm({ ...taskForm, date: e.target.value })} 
+              label="Date"
+              value={taskForm.date}
+              onChange={(e) => setTaskForm({ ...taskForm, date: e.target.value })}
             />
-            <Input 
+            <Input
               type="number"
-              label="Duration (mins)" 
-              value={taskForm.duration} 
-              onChange={(e) => setTaskForm({ ...taskForm, duration: e.target.value })} 
+              label="Duration (mins)"
+              value={taskForm.duration}
+              onChange={(e) => setTaskForm({ ...taskForm, duration: e.target.value })}
             />
           </div>
           <Button className="w-full" onClick={handleAddTask} isLoading={savingTask}>
