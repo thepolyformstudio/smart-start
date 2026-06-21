@@ -39,9 +39,9 @@ interface UserRow {
 
 const typeStyle: Record<FeedbackType, { icon: React.ReactNode; label: string; badge: 'primary' | 'danger' | 'accent' | 'secondary' }> = {
   general: { icon: <MessageSquareHeart className="w-4 h-4" />, label: 'General', badge: 'primary' },
-  bug:     { icon: <Bug className="w-4 h-4" />,              label: 'Bug',     badge: 'danger' },
-  feature: { icon: <Lightbulb className="w-4 h-4" />,        label: 'Feature', badge: 'accent' },
-  praise:  { icon: <Smile className="w-4 h-4" />,            label: 'Praise',  badge: 'secondary' },
+  bug: { icon: <Bug className="w-4 h-4" />, label: 'Bug', badge: 'danger' },
+  feature: { icon: <Lightbulb className="w-4 h-4" />, label: 'Feature', badge: 'accent' },
+  praise: { icon: <Smile className="w-4 h-4" />, label: 'Praise', badge: 'secondary' },
 }
 
 export default function AdminPage() {

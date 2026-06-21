@@ -116,9 +116,10 @@ export default function OnboardingPage() {
       }
 
       success('Setup complete! 🎉')
-      router.push('/dashboard')
-      router.refresh()
-    } catch {
+      // Use hard redirect so middleware re-checks onboarding_completed from DB
+      window.location.href = '/dashboard'
+    } catch (err: any) {
+      console.error('Onboarding error:', err?.message || err)
       showError('Something went wrong. Please try again.')
     } finally {
       setSaving(false)
