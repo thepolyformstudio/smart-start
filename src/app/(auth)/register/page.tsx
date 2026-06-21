@@ -3,13 +3,15 @@
 import React, { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Mail, Lock, Eye, EyeOff, User } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, User, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/ui/toast'
+import { Modal } from '@/components/ui/modal'
 import { createClient } from '@/lib/supabase/client'
 
 export default function RegisterPage() {
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false)
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -137,12 +139,38 @@ export default function RegisterPage() {
         </Button>
       </form>
 
-      <p className="mt-8 text-center text-sm text-text-secondary-light dark:text-text-secondary-dark">
-        Already have an account?{' '}
-        <Link href="/login" className="text-primary-500 hover:text-primary-600 font-semibold">
-          Sign in
-        </Link>
+      <p className="mt-8 text-center text-sm text-text-secondary-light dark:text-text-secondary-dark flex flex-col gap-3">
+        <span>
+          Already have an account?{' '}
+          <Link href="/login" className="text-primary-500 hover:text-primary-600 font-semibold">
+            Sign in
+          </Link>
+        </span>
+        <button
+          type="button"
+          onClick={() => setIsTutorialOpen(true)}
+          className="text-xs text-text-muted-light dark:text-text-muted-dark hover:text-primary-500 font-medium inline-flex items-center justify-center gap-1 cursor-pointer transition-colors"
+        >
+          <Play className="w-3.5 h-3.5" /> Watch Registration & Onboarding Tutorial
+        </button>
       </p>
+
+      {/* Tutorial Video Modal */}
+      <Modal isOpen={isTutorialOpen} onClose={() => setIsTutorialOpen(false)} title="How to Register & Get Started" size="xl">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-full aspect-video rounded-xl overflow-hidden border border-border-light dark:border-border-dark bg-black flex items-center justify-center relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
+              src="/videos/registration_tutorial.webp" 
+              alt="Registration & Onboarding Tutorial" 
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark text-center">
+            This short video walks you through creating your account and completing your onboarding configuration to access the Smart Start dashboard.
+          </p>
+        </div>
+      </Modal>
     </div>
   )
 }

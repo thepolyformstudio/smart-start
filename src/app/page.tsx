@@ -1,13 +1,18 @@
-import React from 'react'
+'use client'
+
+import React, { useState } from 'react'
 import Link from 'next/link'
 import { Logo } from '@/components/logo'
 import { Button } from '@/components/ui/button'
+import { Modal } from '@/components/ui/modal'
 import {
   BookOpen, Target, Flame, Clock, Brain, BarChart3,
-  CheckCircle, Star, ArrowRight, Zap, Calendar, Award
+  CheckCircle, Star, ArrowRight, Zap, Calendar, Award, Play
 } from 'lucide-react'
 
 export default function LandingPage() {
+  const [isTutorialOpen, setIsTutorialOpen] = useState(false)
+
   return (
     <div className="min-h-screen bg-bg-light dark:bg-bg-dark">
       {/* Navigation */}
@@ -59,8 +64,11 @@ export default function LandingPage() {
                   Start Free Today
                 </Button>
               </Link>
+              <Button variant="outline" size="lg" onClick={() => setIsTutorialOpen(true)} icon={<Play className="w-5 h-5" />}>
+                Watch Tutorial
+              </Button>
               <Link href="#features">
-                <Button variant="outline" size="lg">
+                <Button variant="ghost" size="lg">
                   See Features
                 </Button>
               </Link>
@@ -210,6 +218,23 @@ export default function LandingPage() {
           </div>
         </div>
       </footer>
+
+      {/* Tutorial Video Modal */}
+      <Modal isOpen={isTutorialOpen} onClose={() => setIsTutorialOpen(false)} title="How to Register & Get Started" size="xl">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-full aspect-video rounded-xl overflow-hidden border border-border-light dark:border-border-dark bg-black flex items-center justify-center relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
+              src="/videos/registration_tutorial.webp" 
+              alt="Registration & Onboarding Tutorial" 
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark text-center">
+            This short video walks you through creating your account and completing your onboarding configuration (subjects, study hours, and exams) to access the Smart Start dashboard.
+          </p>
+        </div>
+      </Modal>
     </div>
   )
 }
