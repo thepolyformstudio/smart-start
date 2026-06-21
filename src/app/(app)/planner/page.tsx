@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { PageLoader, EmptyState } from '@/components/ui/loading'
 import { Modal } from '@/components/ui/modal'
 import { useToast } from '@/components/ui/toast'
-import { Calendar, Zap, CheckCircle, SkipForward, BookOpen, Clock, Brain, Plus } from 'lucide-react'
+import { Calendar, Zap, CheckCircle, SkipForward, BookOpen, Clock, Brain, Plus, Trash2, AlertTriangle, History } from 'lucide-react'
 import { format } from 'date-fns'
 import { awardXP, updateStreak, checkAchievements } from '@/lib/gamification'
 
@@ -36,6 +36,11 @@ export default function PlannerPage() {
   const [chaptersList, setChaptersList] = useState<{ id: string, name: string }[]>([])
   const [topicsList, setTopicsList] = useState<{ id: string, name: string }[]>([])
   const [savingTask, setSavingTask] = useState(false)
+  // Delete / Move modal
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; task: PlanTask | null }>({ open: false, task: null })
+  const [moveDate, setMoveDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  // Incomplete past tasks
+  const [pastIncompleteTasks, setPastIncompleteTasks] = useState<{ text: string; subject: string; from: string }[]>([])
   const { success, error } = useToast()
 
   const today = format(new Date(), 'yyyy-MM-dd')
@@ -67,7 +72,80 @@ export default function PlannerPage() {
     setLoading(false)
   }, [today])
 
-  useEffect(() => { fetchPlan() }, [fetchPlan])
+  const fetchIncompletePastTasks = useCallback(async () => {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    // Get all plans from the last 14 days (excluding today)
+    const { data } = await supabase
+      .from('daily_plans')
+      .select('plan_date, tasks')
+      .eq('user_id', user.id)
+      .lt('plan_date', today)
+      .gte('plan_date', format(new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), 'yyyy-MM-dd'))
+      .order('plan_date', { ascending: false })
+
+    if (!data) return
+    const incomplete: { text: string; subject: string; from: string }[] = []
+    for (const plan of data) {
+      const planTasks = (plan.tasks as PlanTask[]) || []
+      for (const t of planTasks) {
+        if (!t.completed && !t.skipped && t.text !== 'Break' && t.text !== 'Daily Reflection') {
+          incomplete.push({ text: t.text, subject: t.subject, from: plan.plan_date })
+        }
+      }
+    }
+    setPastIncompleteTasks(incomplete.slice(0, 10)) // cap at 10
+  }, [today])
+
+  useEffect(() => { fetchPlan(); fetchIncompletePastTasks() }, [fetchPlan, fetchIncompletePastTasks])
+
+  const handleDeleteTask = (task: PlanTask) => {
+    setDeleteModal({ open: true, task })
+    setMoveDate(format(new Date(Date.now() + 86400000), 'yyyy-MM-dd')) // default to tomorrow
+  }
+
+  const handleDeleteConfirm = async (action: 'delete' | 'move') => {
+    if (!deleteModal.task) return
+    const task = deleteModal.task
+    // Remove from today's plan
+    const updated = tasks.filter(t => t.id !== task.id)
+    setTasks(updated)
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('daily_plans').update({ tasks: updated }).eq('user_id', user.id).eq('plan_date', today)
+
+    if (action === 'move') {
+      // Add to custom_tasks on the target date
+      await supabase.from('custom_tasks').insert({
+        user_id: user.id,
+        task_text: task.text,
+        task_date: moveDate,
+        duration_minutes: 45,
+      })
+      success(`Task moved to ${format(new Date(moveDate + 'T00:00:00'), 'MMM d, yyyy')} ✓`)
+    } else {
+      success('Task removed from plan.')
+    }
+    setDeleteModal({ open: false, task: null })
+  }
+
+  const addPastTaskToToday = async (task: { text: string; subject: string; from: string }) => {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('custom_tasks').insert({
+      user_id: user.id,
+      task_text: task.text,
+      task_date: today,
+      duration_minutes: 45,
+    })
+    setPastIncompleteTasks(prev => prev.filter(t => !(t.text === task.text && t.from === task.from)))
+    success(`"${task.text}" added to today's plan!`)
+    generatePlan()
+  }
 
   const handleSubjectChange = async (subjectId: string) => {
     setTaskForm(prev => ({ ...prev, subject_id: subjectId, chapter_id: '', topic_id: '', text: '' }))
@@ -500,12 +578,107 @@ export default function PlannerPage() {
                     className={`p-2 rounded-lg transition-colors cursor-pointer ${task.skipped ? 'bg-accent-100 dark:bg-accent-900/30' : 'hover:bg-accent-50 dark:hover:bg-accent-900/10'}`}>
                     <SkipForward className={`w-4 h-4 ${task.skipped ? 'text-accent-500' : 'text-border-light dark:text-border-dark'}`} />
                   </button>
+                  {task.text !== 'Break' && task.text !== 'Daily Reflection' && (
+                    <button onClick={() => handleDeleteTask(task)}
+                      className="p-2 rounded-lg transition-colors cursor-pointer hover:bg-danger-50 dark:hover:bg-danger-900/20">
+                      <Trash2 className="w-4 h-4 text-danger-400" />
+                    </button>
+                  )}
                 </div>
               </div>
             </Card>
           ))}
         </div>
       )}
+
+      {/* Incomplete Tasks from Previous Days */}
+      {pastIncompleteTasks.length > 0 && (
+        <Card className="border-2 border-dashed border-accent-300 dark:border-accent-700 bg-accent-50/30 dark:bg-accent-900/10">
+          <div className="flex items-center gap-2 mb-4">
+            <History className="w-5 h-5 text-accent-500" />
+            <h3 className="font-bold text-text-primary-light dark:text-text-primary-dark">Incomplete from Previous Days</h3>
+            <Badge variant="accent" size="sm">{pastIncompleteTasks.length}</Badge>
+          </div>
+          <p className="text-xs text-text-muted-light dark:text-text-muted-dark mb-3">
+            These tasks were not completed on their scheduled day. Tap to add to today's plan.
+          </p>
+          <div className="space-y-2">
+            {pastIncompleteTasks.map((t, i) => (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-surface-elevated-light dark:bg-surface-elevated-dark">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-text-primary-light dark:text-text-primary-dark truncate">{t.text}</p>
+                  <p className="text-xs text-text-muted-light dark:text-text-muted-dark">
+                    {t.subject && <span className="mr-2">{t.subject} ·</span>}
+                    Missed on {format(new Date(t.from + 'T00:00:00'), 'MMM d')}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => addPastTaskToToday(t)}
+                  icon={<Plus className="w-3.5 h-3.5" />}
+                >
+                  Add Today
+                </Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Delete / Move Modal */}
+      <Modal
+        isOpen={deleteModal.open}
+        onClose={() => setDeleteModal({ open: false, task: null })}
+        title="Remove Task"
+      >
+        <div className="space-y-4">
+          <div className="flex items-start gap-3 p-4 rounded-xl bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800">
+            <AlertTriangle className="w-5 h-5 text-danger-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-danger-700 dark:text-danger-300 text-sm">Removing task:</p>
+              <p className="text-sm text-danger-600 dark:text-danger-400 mt-0.5">{deleteModal.task?.text}</p>
+            </div>
+          </div>
+          <p className="text-sm text-text-secondary-light dark:text-text-secondary-dark">What would you like to do with this task?</p>
+          {/* Move date picker */}
+          <div>
+            <label className="block text-sm font-medium text-text-primary-light dark:text-text-primary-dark mb-1.5">Move to date</label>
+            <input
+              type="date"
+              value={moveDate}
+              onChange={(e) => setMoveDate(e.target.value)}
+              min={format(new Date(), 'yyyy-MM-dd')}
+              className="w-full px-4 py-3 rounded-xl border border-border-light dark:border-border-dark bg-surface-light dark:bg-surface-dark text-text-primary-light dark:text-text-primary-dark text-sm"
+            />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              icon={<Calendar className="w-4 h-4" />}
+              onClick={() => handleDeleteConfirm('move')}
+            >
+              Move to Selected Date
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              icon={<Trash2 className="w-4 h-4" />}
+              onClick={() => handleDeleteConfirm('delete')}
+            >
+              Delete Permanently
+            </Button>
+          </div>
+          <Button
+            variant="ghost"
+            className="w-full"
+            onClick={() => setDeleteModal({ open: false, task: null })}
+          >
+            Cancel
+          </Button>
+        </div>
+      </Modal>
 
       <Modal isOpen={taskModalOpen} onClose={() => { setTaskModalOpen(false); setChaptersList([]); setTopicsList([]) }} title="Schedule a Task">
         <div className="space-y-4">
